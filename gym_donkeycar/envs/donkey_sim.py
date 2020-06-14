@@ -10,6 +10,7 @@ import logging
 import base64
 from threading import Thread
 from io import BytesIO
+import types
 
 import numpy as np
 from PIL import Image
@@ -39,6 +40,15 @@ class DonkeyUnitySimContoller():
 
     def set_car_config(self, body_style, body_rgb, car_name, font_size):
         self.handler.send_car_config(body_style, body_rgb, car_name, font_size)
+
+    def set_cam_config(self, **kwargs):
+        self.handler.send_cam_config(**kwargs)
+
+    def set_reward_fn(self, reward_fn):
+        self.handler.set_reward_fn(reward_fn)
+
+    def set_episode_over_fn(self, ep_over_fn):
+        self.handler.set_episode_over_fn(ep_over_fn)
 
     def wait_until_loaded(self):
         while not self.handler.loaded:
@@ -93,6 +103,11 @@ class DonkeyUnitySimHandler(IMesgHandler):
                     "scene_selection_ready": self.on_scene_selection_ready,
                     "scene_names": self.on_recv_scene_names,
                     "car_loaded": self.on_car_loaded,
+                    "cross_start": self.on_cross_start,
+                    "race_start": self.on_race_start,
+                    "race_stop": self.on_race_stop,
+                    "DQ": self.on_DQ,
+                    "ping": self.on_ping,
                     "aborted": self.on_abort}
 
     def on_connect(self, client):
@@ -150,7 +165,7 @@ class DonkeyUnitySimHandler(IMesgHandler):
         info = {'pos': (self.x, self.y, self.z), 'cte': self.cte,
                 "speed": self.speed, "hit": self.hit}
 
-        self.timer.on_frame()
+        #self.timer.on_frame()
 
         return observation, reward, done, info
 
@@ -158,6 +173,13 @@ class DonkeyUnitySimHandler(IMesgHandler):
         return self.over
 
     ## ------ RL interface ----------- ##
+
+    def set_reward_fn(self, reward_fn):
+        """
+        allow users to set their own reward function
+        """
+        self.calc_reward = types.MethodType(reward_fn, self)
+        logger.debug("custom reward fn set.")
 
     def calc_reward(self, done):
         if done:
@@ -168,9 +190,10 @@ class DonkeyUnitySimHandler(IMesgHandler):
 
         if self.hit != "none":
             return -2.0
-
+        
         # going fast close to the center of lane yeilds best reward
         return (1.0 - (math.fabs(self.cte) / self.max_cte)) * self.speed
+
 
     ## ------ Socket interface ----------- ##
 
@@ -201,6 +224,32 @@ class DonkeyUnitySimHandler(IMesgHandler):
 
         self.determine_episode_over()
 
+    def on_cross_start(self, data):        
+        logger.info(f"crossed start line: lap_time {data['lap_time']}")
+
+    def on_race_start(self, data):
+        logger.debug(f"race started")
+
+    def on_race_stop(self, data):
+        logger.debug(f"race stoped")
+
+    def on_DQ(self, data):
+        logger.info(f"racer DQ")
+        self.over = True
+
+    def on_ping(self, message):
+        """
+        no reply needed at this point. Server sends these as a keep alive to make sure clients haven't gone away.
+        """
+        pass
+
+    def set_episode_over_fn(self, ep_over_fn):
+        """
+        allow userd to define their own episode over function
+        """
+        self.determine_episode_over = types.MethodType(ep_over_fn, self)
+        logger.debug("custom ep_over fn set.")
+
     def determine_episode_over(self):
         # we have a few initial frames on start that are sometimes very large CTE when it's behind
         # the path just slightly. We ignore those.
@@ -225,6 +274,7 @@ class DonkeyUnitySimHandler(IMesgHandler):
         if data:
             names = data['scene_names']
             logger.debug(f"SceneNames: {names}")
+            print("loading scene", self.iSceneToLoad, names[self.iSceneToLoad])
             self.send_load_scene(names[self.iSceneToLoad])
 
     def send_control(self, steer, throttle):
@@ -247,9 +297,11 @@ class DonkeyUnitySimHandler(IMesgHandler):
         self.queue_message(msg)
 
     def send_car_config(self, body_style, body_rgb, car_name, font_size):
+        """
         # body_style = "donkey" | "bare" | "car01" choice of string
         # body_rgb  = (128, 128, 128) tuple of ints
         # car_name = "string less than 64 char"
+        """
         msg = {'msg_type': 'car_config',
             'body_style': body_style,
             'body_r' : body_rgb[0].__str__(),
@@ -258,6 +310,32 @@ class DonkeyUnitySimHandler(IMesgHandler):
             'car_name': car_name,
             'font_size' : font_size.__str__() }
         self.queue_message(msg)
+        time.sleep(0.1)
+
+    def send_cam_config(self, img_w=0, img_h=0, img_d=0, img_enc=0, fov=0, fish_eye_x=0, fish_eye_y=0, offset_x=0, offset_y=0, offset_z=0, rot_x=0):
+        """ Camera config
+            set any field to Zero to get the default camera setting.
+            offset_x moves camera left/right
+            offset_y moves camera up/down
+            offset_z moves camera forward/back
+            rot_x will rotate the camera
+            with fish_eye_x/y == 0.0 then you get no distortion
+            img_enc can be one of JPG|PNG|TGA
+        """
+        msg = {"msg_type" : "cam_config",
+               "fov" : str(fov),
+               "fish_eye_x" : str(fish_eye_x),
+               "fish_eye_y" : str(fish_eye_y),
+               "img_w" : str(img_w),
+               "img_h" : str(img_h),
+               "img_d" : str(img_d),
+               "img_enc" : str(img_enc),
+               "offset_x" : str(offset_x),
+               "offset_y" : str(offset_y),
+               "offset_z" : str(offset_z),
+               "rot_x" : str(rot_x) }
+        self.queue_message(msg)
+        time.sleep(0.1)
 
     def queue_message(self, msg):
         if self.client is None:

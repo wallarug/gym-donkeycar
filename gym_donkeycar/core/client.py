@@ -25,6 +25,7 @@ class SDClient:
         self.host = host
         self.port = port
         self.poll_socket_sleep_sec = poll_socket_sleep_time
+        self.th = None
 
         # the aborted flag will be set when we have detected a problem with the socket
         # that we can't recover from.
@@ -37,7 +38,10 @@ class SDClient:
 
         # connecting to the server 
         print("connecting to", self.host, self.port)
-        self.s.connect((self.host, self.port))
+        try:
+            self.s.connect((self.host, self.port))
+        except ConnectionRefusedError as e:
+            raise( Exception("Could not connect to server. Is it running? If you specified 'remote', then you must start it manually."))
 
         # time.sleep(pause_on_create)
         self.do_process_msgs = True
@@ -59,8 +63,10 @@ class SDClient:
         # signal proc_msg loop to stop, then wait for thread to finish
         # close socket
         self.do_process_msgs = False
-        self.th.join()
-        self.s.close()
+        if self.th is not None:
+            self.th.join()
+        if self.s is not None:
+            self.s.close()
 
 
     def proc_msg(self, sock):
@@ -112,19 +118,27 @@ class SDClient:
                             # Replace comma with dots for floats
                             # useful when using unity in a language different from English
                             m = replace_float_notation(m)
-                            j = json.loads(m)
-                            self.on_msg_recv(j)
+                            try:
+                                j = json.loads(m)
+                                self.on_msg_recv(j)
+                            except Exception as e:
+                                print("Exception:", e)
+                                print("json:", m)
                         else:
                             partial.append(m)
                             if last_char == '}':
                                 if partial[0][0] == "{":
                                     assembled_packet = "".join(partial)
                                     assembled_packet = replace_float_notation(assembled_packet)
-                                    j = json.loads(assembled_packet)
-                                    self.on_msg_recv(j)
+                                    try:
+                                        j = json.loads(assembled_packet)
+                                        self.on_msg_recv(j)
+                                    except Exception as e:
+                                        print(e)
+                                        print("json:", assembled_packet)
                                 else:
                                     print("failed packet.")
-                                partial.clear()                            
+                                partial.clear()
                         
                 for s in writable:
                     if self.msg != None:
