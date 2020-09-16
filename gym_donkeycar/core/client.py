@@ -15,9 +15,11 @@ import socket
 import select
 from threading import Thread
 import json
+import logging
 
 from .util import replace_float_notation
 
+logger = logging.getLogger(__name__)
 
 class SDClient:
     def __init__(self, host, port, poll_socket_sleep_time=0.05):
@@ -37,7 +39,7 @@ class SDClient:
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # connecting to the server 
-        print("connecting to", self.host, self.port)
+        logger.info("connecting to %s:%d " % (self.host, self.port))
         try:
             self.s.connect((self.host, self.port))
         except ConnectionRefusedError as e:
@@ -52,11 +54,12 @@ class SDClient:
     def send(self, m):
         self.msg = m
 
+    def send_now(self, msg):
+        logger.debug("send_now:" + msg)
+        self.s.sendall(msg.encode("utf-8"))
 
     def on_msg_recv(self, j):
-        # print("got:", j['msg_type'])
-        # we will always have a 'msg_type' and will always get a json obj
-        pass
+        logger.debug("got:" + j['msg_type'])
 
 
     def stop(self):
@@ -94,9 +97,9 @@ class SDClient:
                 for s in readable:
                     # print("waiting to recv")
                     try:
-                        data = s.recv(1024 * 64)
+                        data = s.recv(1024 * 256)
                     except ConnectionAbortedError:
-                        print("socket connection aborted")
+                        logger.warn("socket connection aborted")
                         self.do_process_msgs = False
                         break
                     
@@ -122,31 +125,39 @@ class SDClient:
                                 j = json.loads(m)
                                 self.on_msg_recv(j)
                             except Exception as e:
-                                print("Exception:", e)
-                                print("json:", m)
+                                logger.error("Exception:" + str(e))
+                                logger.error("json: " + m)
                         else:
                             partial.append(m)
+                            # logger.info("partial packet:" + m)
                             if last_char == '}':
                                 if partial[0][0] == "{":
                                     assembled_packet = "".join(partial)
                                     assembled_packet = replace_float_notation(assembled_packet)
+                                    second_open = assembled_packet.find('{"msg', 1)
+                                    if second_open != -1:
+                                        # hmm what to do? We have a partial packet. Trimming just
+                                        # the good part and discarding the rest.
+                                        logger.warn("got partial packet:" + assembled_packet[:20])
+                                        assembled_packet = assembled_packet[second_open:]
+
                                     try:
                                         j = json.loads(assembled_packet)
                                         self.on_msg_recv(j)
                                     except Exception as e:
-                                        print(e)
-                                        print("json:", assembled_packet)
+                                        logger.error("Exception:" + str(e))
+                                        logger.error("partial json: " + assembled_packet)
                                 else:
-                                    print("failed packet.")
+                                    logger.error("failed packet.")
                                 partial.clear()
                         
                 for s in writable:
                     if self.msg != None:
-                        # print("sending", self.msg)
+                        logger.debug("sending " + self.msg)
                         s.sendall(self.msg.encode("utf-8"))
                         self.msg = None
                 if len(exceptional) > 0:
-                    print("problems w sockets!")
+                    logger.error("problems w sockets!")
 
             except Exception as e:
                 print("Exception:", e)
