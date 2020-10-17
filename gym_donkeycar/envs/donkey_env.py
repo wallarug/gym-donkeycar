@@ -43,7 +43,7 @@ class DonkeyEnv(gym.Env):
     STEER_LIMIT_LEFT = -1.0
     STEER_LIMIT_RIGHT = 1.0
     THROTTLE_MIN = 0.0
-    THROTTLE_MAX = 5.0
+    THROTTLE_MAX = 1.0
     VAL_PER_PIXEL = 255
 
     def __init__(self, level, conf):
@@ -137,28 +137,34 @@ class DonkeyEnv(gym.Env):
 class GeneratedRoadsEnv(DonkeyEnv):
 
     def __init__(self, *args, **kwargs):
-        super(GeneratedRoadsEnv, self).__init__(level=0, *args, **kwargs)
+        super(GeneratedRoadsEnv, self).__init__(level='generated_road', *args, **kwargs)
 
 
 class WarehouseEnv(DonkeyEnv):
 
     def __init__(self, *args, **kwargs):
-        super(WarehouseEnv, self).__init__(level=1, *args, **kwargs)
+        super(WarehouseEnv, self).__init__(level='warehouse', *args, **kwargs)
 
 
 class AvcSparkfunEnv(DonkeyEnv):
 
     def __init__(self, *args, **kwargs):
-        super(AvcSparkfunEnv, self).__init__(level=2, *args, **kwargs)
+        super(AvcSparkfunEnv, self).__init__(level='sparkfun_avc', *args, **kwargs)
 
 
 class GeneratedTrackEnv(DonkeyEnv):
 
     def __init__(self, *args, **kwargs):
-        super(GeneratedTrackEnv, self).__init__(level=3, *args, **kwargs)
+        super(GeneratedTrackEnv, self).__init__(level='generated_track', *args, **kwargs)
 
 
 class MountainTrackEnv(DonkeyEnv):
 
     def __init__(self, *args, **kwargs):
-        super(MountainTrackEnv, self).__init__(level=4, *args, **kwargs)
+        super(MountainTrackEnv, self).__init__(level='mountain_track', *args, **kwargs)
+
+
+class RoboRacingLeagueTrackEnv(DonkeyEnv):
+
+    def __init__(self, *args, **kwargs):
+        super(RoboRacingLeagueTrackEnv, self).__init__(level='roboracingleague_1', *args, **kwargs)
