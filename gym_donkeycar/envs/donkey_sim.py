@@ -329,11 +329,11 @@ class DonkeyUnitySimHandler(IMesgHandler):
             else:
                 raise ValueError(f"Scene name {self.SceneToLoad} not in scene list {names}")
 
-    def send_control(self, steer, throttle):
+    def send_control(self, steer, throttle, brake):
         if not self.loaded:
             return
         msg = {'msg_type': 'control', 'steering': steer.__str__(
-        ), 'throttle': throttle.__str__(), 'brake': '0.0'}
+        ), 'throttle': throttle.__str__(), 'brake': brake.__str__()}
         self.queue_message(msg)
 
     def send_reset_car(self):
