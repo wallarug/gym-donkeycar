@@ -190,7 +190,7 @@ class DonkeyUnitySimHandler(IMesgHandler):
         return self.camera_img_size
 
     def take_action(self, action):
-        self.send_control(action[0], action[1])
+        self.send_control(action[0], action[1], action[2])
 
     def observe(self):
         while self.last_obs is self.image_array:
